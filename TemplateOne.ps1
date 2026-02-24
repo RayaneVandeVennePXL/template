@@ -8,26 +8,35 @@ $newGuid = [guid]::NewGuid().ToString()
 $registryPath = "HKLM:\SOFTWARE\Microsoft\Cryptography"
 Set-ItemProperty -Path $registryPath -Name "MachineGuid" -Value $newGuid
 
-# 3. Network Authentication
+# 3. Network Authentication Loop
 $networkPath = "\\install.sensors.elex.be\install"
-$userEmail = Read-Host "Enter your Elex email (e.g. user@elex.be)"
 
-Write-Host "Connecting to $networkPath..." -ForegroundColor Cyan
-net use $networkPath /user:$userEmail *
+while ($true) {
+    $username = Read-Host "Enter your username"
+    Write-Host "Connecting to $networkPath. Enter password for $username:" -ForegroundColor Cyan
+    
+    # Try to connect
+    net use $networkPath /user:$username *
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error: Authentication failed." -ForegroundColor Red
-    pause ; exit
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Success!" -ForegroundColor Green
+        break
+    } else {
+        Write-Host "Login failed. Check username/password and try again." -ForegroundColor Red
+    }
 }
 
 # 4. Copy and Install
 $localDest = "C:\Scripts\ManageEngineClient.exe"
 $remoteFile = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
 
-Copy-Item -Path $remoteFile -Destination $localDest -Force
-
-Write-Host "Installing ManageEngine..." -ForegroundColor Green
-Start-Process $localDest -ArgumentList "-silent" -Wait
+if (Test-Path $remoteFile) {
+    Copy-Item -Path $remoteFile -Destination $localDest -Force
+    Write-Host "Installing ManageEngine..." -ForegroundColor Green
+    Start-Process $localDest -ArgumentList "-silent" -Wait
+} else {
+    Write-Host "Error: Installer not found on network path." -ForegroundColor Red
+}
 
 # 5. Cleanup and Reboot
 net use $networkPath /delete /y
