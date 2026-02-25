@@ -13,7 +13,7 @@ $networkPath = "\\install.sensors.elex.be\install"
 
 while ($true) {
     $username = Read-Host "Enter your username"
-    Write-Host "Connecting to $networkPath. Enter password for $username:" -ForegroundColor Cyan
+    Write-Host "Connecting to $networkPath. Enter password for ${username}:" -ForegroundColor Cyan
     
     # Try to connect
     net use $networkPath /user:$username *
