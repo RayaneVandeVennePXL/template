@@ -50,8 +50,7 @@ $remoteME = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
 if (Test-Path $remoteME) {
     Copy-Item $remoteME $localME -Force
     Write-Host "Installing ManageEngine..." -ForegroundColor Green
-    $proc = Start-Process $localME -ArgumentList "-silent" -PassThru
-    $proc.WaitForExit()
+    Start-Process $localME -ArgumentList "-silent" -Wait -NoNewWindow
 } else {
     Write-Host "Error: ManageEngine installer not found." -ForegroundColor Red
 }
