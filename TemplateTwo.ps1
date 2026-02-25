@@ -9,11 +9,13 @@ if ($dnsSuffix) {
 }
 Write-Host "Site: $siteLabel | Path: $networkPath" -ForegroundColor Cyan
 
-# 2. Start QEMU download in background
-$qemuJob = Start-Job {
-    Invoke-WebRequest "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe" -OutFile "C:\Scripts\qemu-tools.exe"
-}
-Write-Host "QEMU download started in background..." -ForegroundColor Gray
+
+# 2. Download QEMU (geen background job meer)
+Write-Host "Downloading QEMU tools..." -ForegroundColor Gray
+Invoke-WebRequest "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe" `
+    -OutFile "C:\Scripts\qemu-tools.exe"
+Write-Host "QEMU download completed." -ForegroundColor Green
+
 
 # 3. Network Authentication Loop
 while ($true) {
@@ -40,6 +42,7 @@ while ($true) {
     }
 }
 
+
 # 4. ManageEngine Install
 $localME = "C:\Scripts\ManageEngineClient.exe"
 $remoteME = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
@@ -53,13 +56,12 @@ if (Test-Path $remoteME) {
     Write-Host "Error: ManageEngine installer not found." -ForegroundColor Red
 }
 
-# 5. Wait for QEMU download and install
-Write-Host "Waiting for QEMU download to finish..." -ForegroundColor Gray
-Wait-Job $qemuJob
-Remove-Job $qemuJob
+
+# 5. Install QEMU
 Write-Host "Installing/Updating QEMU Guest Agent..." -ForegroundColor Yellow
 $qemuProc = Start-Process "C:\Scripts\qemu-tools.exe" -ArgumentList "/passive", "/norestart" -PassThru
 $qemuProc.WaitForExit()
+
 
 # 6. Create local mlx admin account
 Add-Type -AssemblyName System.Web
@@ -78,6 +80,7 @@ $desktopPath = [Environment]::GetFolderPath("Desktop")
 "MLX Admin Password: $mlxPassword" | Out-File "$desktopPath\mlx_password.txt"
 Write-Host "Password written to $desktopPath\mlx_password.txt" -ForegroundColor Yellow
 Read-Host "Save the password in the vault, then press Enter to reboot"
+
 
 # 7. Cleanup & Reboot
 net use $networkPath /delete /y
