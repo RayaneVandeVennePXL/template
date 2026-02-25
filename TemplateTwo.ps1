@@ -10,7 +10,7 @@ if ($dnsSuffix) {
 Write-Host "Site: $siteLabel | Path: $networkPath" -ForegroundColor Cyan
 
 
-# 2. Download QEMU (geen background job meer)
+# 2. Download QEMU
 Write-Host "Downloading QEMU tools..." -ForegroundColor Gray
 Invoke-WebRequest "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe" `
     -OutFile "C:\Scripts\qemu-tools.exe"
@@ -21,7 +21,9 @@ Write-Host "QEMU download completed." -ForegroundColor Green
 while ($true) {
     $username = Read-Host "Enter username for $siteLabel"
     $password = Read-Host "Enter password" -AsSecureString
-    $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
+    $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+    )
     
     net use $networkPath /user:$username $plainPassword
     if ($LASTEXITCODE -eq 0) {
@@ -43,7 +45,38 @@ while ($true) {
 }
 
 
-# 4. ManageEngine Install
+# 4. Install QEMU
+Write-Host "Installing/Updating QEMU Guest Agent..." -ForegroundColor Yellow
+Start-Process "C:\Scripts\qemu-tools.exe" -ArgumentList "/passive", "/norestart" -Wait
+
+
+# 5. Create local mlx admin account
+Add-Type -AssemblyName System.Web
+$mlxPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
+
+New-LocalUser -Name "mlx" `
+    -Password (ConvertTo-SecureString $mlxPassword -AsPlainText -Force) `
+    -FullName "MLX Admin" `
+    -PasswordNeverExpires
+
+Add-LocalGroupMember -Group "Administrators" -Member "mlx"
+Write-Host "MLX admin account created." -ForegroundColor Green
+
+
+# 6. Reset Administrator password to random (not saved)
+$adminPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
+Set-LocalUser -Name "Administrator" `
+    -Password (ConvertTo-SecureString $adminPassword -AsPlainText -Force)
+
+Write-Host "Administrator password has been reset." -ForegroundColor Green
+
+
+# 7. Cleanup network connection
+net use $networkPath /delete /y
+net use "\\install.sensors.elex.be\install" /delete /y 2>$null
+
+
+# 8. ManageEngine Install (ALS LAATSTE)
 $localME = "C:\Scripts\ManageEngineClient.exe"
 $remoteME = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
 
@@ -51,39 +84,22 @@ if (Test-Path $remoteME) {
     Copy-Item $remoteME $localME -Force
     Write-Host "Installing ManageEngine..." -ForegroundColor Green
     Start-Process $localME -ArgumentList "-silent" -Wait -NoNewWindow
+    
+    Start-Sleep -Seconds 10
+    Get-Service -Name "ManageEngine UEMS - Agent" -ErrorAction SilentlyContinue
 } else {
     Write-Host "Error: ManageEngine installer not found." -ForegroundColor Red
 }
 
 
-# 5. Install QEMU
-Write-Host "Installing/Updating QEMU Guest Agent..." -ForegroundColor Yellow
-$qemuProc = Start-Process "C:\Scripts\qemu-tools.exe" -ArgumentList "/passive", "/norestart" -PassThru
-$qemuProc.WaitForExit()
-
-
-# 6. Create local mlx admin account
-Add-Type -AssemblyName System.Web
-$mlxPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
-New-LocalUser -Name "mlx" -Password (ConvertTo-SecureString $mlxPassword -AsPlainText -Force) -FullName "MLX Admin" -PasswordNeverExpires
-Add-LocalGroupMember -Group "Administrators" -Member "mlx"
-Write-Host "MLX admin account created." -ForegroundColor Green
-
-# Reset Administrator password to random (not saved)
-$adminPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
-Set-LocalUser -Name "Administrator" -Password (ConvertTo-SecureString $adminPassword -AsPlainText -Force)
-Write-Host "Administrator password has been reset." -ForegroundColor Green
-
-# Write mlx password to desktop
+# 9. Write mlx password to desktop
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 "MLX Admin Password: $mlxPassword" | Out-File "$desktopPath\mlx_password.txt"
 Write-Host "Password written to $desktopPath\mlx_password.txt" -ForegroundColor Yellow
 Read-Host "Save the password in the vault, then press Enter to reboot"
 
 
-# 7. Cleanup & Reboot
-net use $networkPath /delete /y
-net use "\\install.sensors.elex.be\install" /delete /y 2>$null
+# 10. Reboot
 Write-Host "Done. Rebooting in 5s..." -ForegroundColor Cyan
 Start-Sleep -Seconds 5
 Restart-Computer
