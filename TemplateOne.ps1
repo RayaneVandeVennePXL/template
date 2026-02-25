@@ -3,10 +3,6 @@ $newName = Read-Host "Enter new hostname"
 Write-Host "Renaming to $newName..." -ForegroundColor Yellow
 Rename-Computer -NewName $newName -Force
 
-# 2. Unique Identifier
-$newGuid = [guid]::NewGuid().ToString()
-$registryPath = "HKLM:\SOFTWARE\Microsoft\Cryptography"
-Set-ItemProperty -Path $registryPath -Name "MachineGuid" -Value $newGuid
 
 # 3. Network Authentication Loop
 $networkPath = "\\install.sensors.elex.be\install"
