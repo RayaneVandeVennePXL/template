@@ -22,20 +22,27 @@ while ($true) {
     $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
     
     net use $networkPath /user:$username $plainPassword
-    if ($LASTEXITCODE -eq 0) { Write-Host "Connected!" -ForegroundColor Green; break }
-    else { Write-Host "Login failed. Try again." -ForegroundColor Red }
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Connected!" -ForegroundColor Green
+        break
+    } else {
+        if ($siteLabel -ne "IEPER (FALLBACK)") {
+            Write-Host "Site $siteLabel not reachable, falling back to Ieper..." -ForegroundColor Yellow
+            $networkPath = "\\install.sensors.elex.be\install"
+            $siteLabel = "IEPER (FALLBACK)"
+            net use $networkPath /user:$username $plainPassword
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Connected to Ieper!" -ForegroundColor Green
+                break
+            }
+        }
+        Write-Host "Login failed. Try again." -ForegroundColor Red
+    }
 }
 
-# 4. ManageEngine Install (met fallback naar Ieper)
+# 4. ManageEngine Install
 $localME = "C:\Scripts\ManageEngineClient.exe"
 $remoteME = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
-
-if (!(Test-Path $remoteME)) {
-    Write-Host "ManageEngine not found on $siteLabel, falling back to Ieper..." -ForegroundColor Yellow
-    $fallbackPath = "\\install.sensors.elex.be\install"
-    net use $fallbackPath /user:$username $plainPassword
-    $remoteME = "$fallbackPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
-}
 
 if (Test-Path $remoteME) {
     Copy-Item $remoteME $localME -Force
@@ -43,7 +50,7 @@ if (Test-Path $remoteME) {
     $proc = Start-Process $localME -ArgumentList "-silent" -PassThru
     $proc.WaitForExit()
 } else {
-    Write-Host "Error: ManageEngine installer not found on any site." -ForegroundColor Red
+    Write-Host "Error: ManageEngine installer not found." -ForegroundColor Red
 }
 
 # 5. Wacht tot QEMU download klaar is en installeer
