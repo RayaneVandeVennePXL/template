@@ -1,4 +1,4 @@
-# 1. DNS Suffix detectie
+# 1. DNS Suffix detection
 $dnsSuffix = (Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -and $_.DNSDomain }).DNSDomain | Select-Object -First 1
 if ($dnsSuffix) {
     $networkPath = "\\$dnsSuffix\install"
@@ -9,16 +9,13 @@ if ($dnsSuffix) {
 }
 Write-Host "Site: $siteLabel | Path: $networkPath" -ForegroundColor Cyan
 
-# 2. Start QEMU download op achtergrond
+# 2. Start QEMU download in background
 $qemuJob = Start-Job {
     Invoke-WebRequest "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe" -OutFile "C:\Scripts\qemu-tools.exe"
 }
 Write-Host "QEMU download started in background..." -ForegroundColor Gray
 
-# 3. Hostname Setup
-# (Hostname werd al gezet in script 1)
-
-# 4. Network Authentication Loop
+# 3. Network Authentication Loop
 while ($true) {
     $username = Read-Host "Enter username for $siteLabel"
     $password = Read-Host "Enter password" -AsSecureString
@@ -43,7 +40,7 @@ while ($true) {
     }
 }
 
-# 5. ManageEngine Install
+# 4. ManageEngine Install
 $localME = "C:\Scripts\ManageEngineClient.exe"
 $remoteME = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
 
@@ -56,7 +53,7 @@ if (Test-Path $remoteME) {
     Write-Host "Error: ManageEngine installer not found." -ForegroundColor Red
 }
 
-# 6. Wacht tot QEMU download klaar is en installeer
+# 5. Wait for QEMU download and install
 Write-Host "Waiting for QEMU download to finish..." -ForegroundColor Gray
 Wait-Job $qemuJob
 Remove-Job $qemuJob
@@ -64,24 +61,25 @@ Write-Host "Installing/Updating QEMU Guest Agent..." -ForegroundColor Yellow
 $qemuProc = Start-Process "C:\Scripts\qemu-tools.exe" -ArgumentList "/passive", "/norestart" -PassThru
 $qemuProc.WaitForExit()
 
-# 7. Lokale mlx admin account aanmaken
+# 6. Create local mlx admin account
 Add-Type -AssemblyName System.Web
 $mlxPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
 New-LocalUser -Name "mlx" -Password (ConvertTo-SecureString $mlxPassword -AsPlainText -Force) -FullName "MLX Admin" -PasswordNeverExpires $true
 Add-LocalGroupMember -Group "Administrators" -Member "mlx"
-Write-Host "MLX admin account aangemaakt." -ForegroundColor Green
+Write-Host "MLX admin account created." -ForegroundColor Green
 
-# Reset Administrator wachtwoord naar random (niet onthouden)
+# Reset Administrator password to random (not saved)
 $adminPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
 Set-LocalUser -Name "Administrator" -Password (ConvertTo-SecureString $adminPassword -AsPlainText -Force)
-Write-Host "Administrator wachtwoord gereset." -ForegroundColor Green
+Write-Host "Administrator password has been reset." -ForegroundColor Green
 
-# Schrijf mlx wachtwoord naar bureaublad
+# Write mlx password to desktop
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 "MLX Admin Password: $mlxPassword" | Out-File "$desktopPath\mlx_password.txt"
-Write-Host "Wachtwoord geschreven naar $desktopPath\mlx_password.txt" -ForegroundColor Yellow
+Write-Host "Password written to $desktopPath\mlx_password.txt" -ForegroundColor Yellow
+Read-Host "Save the password in the vault, then press Enter to reboot"
 
-# 8. Cleanup & Reboot
+# 7. Cleanup & Reboot
 net use $networkPath /delete /y
 net use "\\install.sensors.elex.be\install" /delete /y 2>$null
 Write-Host "Done. Rebooting in 5s..." -ForegroundColor Cyan
