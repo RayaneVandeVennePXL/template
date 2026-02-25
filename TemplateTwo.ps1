@@ -1,54 +1,55 @@
-# 0. Site Detection Logica
-$domain = (Get-ADDomainController -Discover).Site
-Write-Host "Detected AD Site: $domain" -ForegroundColor White
+# 1. Haal de prefix uit de DNS Suffix (bv. 'tess' of 'sensors')
+$dnsSuffix = (Get-NetAdapter | Get-DnsClient).ConnectionSpecificSuffix | Where-Object {$_} | Select-Object -First 1
+$prefix = $dnsSuffix.Split('.')[0]
 
-# Map locaties aan netwerkpaden
-# Voeg hier je andere sites toe (bijv. "Gent", "Antwerpen")
-switch ($domain) {
-    "Ieper"   { $networkPath = "\\install.sensors.elex.be\install" }
-    "SiteB"   { $networkPath = "\\server.siteB.local\install" }
-    "SiteC"   { $networkPath = "\\server.siteC.local\install" }
-    Default   { 
-        Write-Host "Site not recognized, falling back to Ieper..." -ForegroundColor Yellow
-        $networkPath = "\\install.sensors.elex.be\install" 
-    }
+# 2. Bouw het dynamische pad
+$networkPath = "\\$prefix.sensors.elex.be\install"
+
+Write-Host "Checking connectivity for site: $prefix..." -ForegroundColor Gray
+
+# 3. Fetch test: Bestaat het pad? Zo niet -> Fallback naar Ieper
+if (!(Test-Path $networkPath)) {
+    Write-Host "Path $networkPath not reachable. Falling back to Ieper (sensors)..." -ForegroundColor Yellow
+    $networkPath = "\\install.sensors.elex.be\install"
+    $siteName = "Ieper (Fallback)"
+} else {
+    Write-Host "Site $prefix confirmed!" -ForegroundColor Green
+    $siteName = $prefix.ToUpper()
 }
 
-# 1. Network Authentication Loop
+# 4. Network Authentication Loop
 while ($true) {
-    $username = Read-Host "Enter your username for $domain"
-    Write-Host "Connecting to $networkPath. Password for ${username}:" -ForegroundColor Cyan
+    $username = Read-Host "Enter username for $siteName"
+    Write-Host "Connecting to $networkPath..." -ForegroundColor Cyan
     net use $networkPath /user:$username *
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Success!" -ForegroundColor Green ; break
-    } else {
-        Write-Host "Login failed. Try again." -ForegroundColor Red
-    }
+    if ($LASTEXITCODE -eq 0) { Write-Host "Connected!" -ForegroundColor Green; break }
+    else { Write-Host "Login failed. Try again." -ForegroundColor Red }
 }
 
-# 2. ManageEngine Install
-$localDest = "C:\Scripts\ManageEngineClient.exe"
-$remoteFile = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
+# 5. ManageEngine Installatie
+$localME = "C:\Scripts\ManageEngineClient.exe"
+$remoteME = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe"
 
-if (Test-Path $remoteFile) {
-    Copy-Item -Path $remoteFile -Destination $localDest -Force
-    Write-Host "Installing ManageEngine for site: $domain..." -ForegroundColor Green
-    $proc = Start-Process $localDest -ArgumentList "-silent" -PassThru
+if (Test-Path $remoteME) {
+    Copy-Item $remoteME $localME -Force
+    Write-Host "Installing ManageEngine..." -ForegroundColor Green
+    $proc = Start-Process $localME -ArgumentList "-silent" -PassThru
     $proc.WaitForExit()
+    
+    # Wachten tot MSI installer klaar is met opruimen
     while (Get-Process msiexec -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 2 }
 }
 
-# 3. QEMU Guest Agent
+# 6. QEMU Guest Agent
 if (!(Get-Service -Name QEMU-Guest-Agent -ErrorAction SilentlyContinue)) {
     Write-Host "Installing QEMU Guest Agent..." -ForegroundColor Yellow
     $qemuUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe"
-    Invoke-WebRequest -Uri $qemuUrl -OutFile "C:\Scripts\virtio-win-guest-tools.exe"
-    $qemuProc = Start-Process "C:\Scripts\virtio-win-guest-tools.exe" -Argumentlist "/passive", "/norestart" -PassThru
-    $qemuProc.WaitForExit()
+    Invoke-WebRequest $qemuUrl -OutFile "C:\Scripts\qemu-tools.exe"
+    (Start-Process "C:\Scripts\qemu-tools.exe" -ArgumentList "/passive", "/norestart" -PassThru).WaitForExit()
 }
 
-# 4. Cleanup and Final Reboot
+# 7. Cleanup & Finish
 net use $networkPath /delete /y
-Write-Host "All done! Final reboot..." -ForegroundColor Cyan
+Write-Host "All installations complete. Final reboot in 5s..." -ForegroundColor Cyan
 Start-Sleep -Seconds 5
 Restart-Computer
