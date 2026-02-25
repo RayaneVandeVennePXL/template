@@ -64,7 +64,7 @@ $qemuProc.WaitForExit()
 # 6. Create local mlx admin account
 Add-Type -AssemblyName System.Web
 $mlxPassword = [System.Web.Security.Membership]::GeneratePassword(16, 3)
-New-LocalUser -Name "mlx" -Password (ConvertTo-SecureString $mlxPassword -AsPlainText -Force) -FullName "MLX Admin" -PasswordNeverExpires $true
+New-LocalUser -Name "mlx" -Password (ConvertTo-SecureString $mlxPassword -AsPlainText -Force) -FullName "MLX Admin" -PasswordNeverExpires
 Add-LocalGroupMember -Group "Administrators" -Member "mlx"
 Write-Host "MLX admin account created." -ForegroundColor Green
 
