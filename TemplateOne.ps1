@@ -32,20 +32,27 @@ $remoteFile = "$networkPath\mdt\Applications\ManageEngine\ManageEngineClient.exe
 if (Test-Path $remoteFile) {
     Copy-Item -Path $remoteFile -Destination $localDest -Force
     Write-Host "Installing ManageEngine..." -ForegroundColor Green
-    Start-Process $localDest -ArgumentList "-silent" -Wait
-} else {
-    Write-Host "Error: ManageEngine installer not found." -ForegroundColor Red
+    
+    # Start en wacht op het proces
+    $proc = Start-Process $localDest -ArgumentList "-silent" -PassThru
+    $proc.WaitForExit()
+
+    # Extra veiligheid: wacht tot de Windows Installer service vrij is
+    Write-Host "Waiting for Windows Installer to finish..." -ForegroundColor Gray
+    while (Get-Process msiexec -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 2 }
 }
 
-# 5. QEMU Guest Agent (Proxmox Integration)
+# 5. QEMU Guest Agent
 if (!(Get-Service -Name QEMU-Guest-Agent -ErrorAction SilentlyContinue)) {
     Write-Host "Installing QEMU Guest Agent..." -ForegroundColor Yellow
     $qemuUrl = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe"
     $qemuDest = "C:\Scripts\virtio-win-guest-tools.exe"
     
     Invoke-WebRequest -Uri $qemuUrl -OutFile $qemuDest
-    Start-Process $qemuDest -ArgumentList "/passive", "/norestart" -Wait
-    Write-Host "QEMU Guest Agent installed." -ForegroundColor Green
+    
+    # Start installatie
+    $qemuProc = Start-Process $qemuDest -ArgumentList "/passive", "/norestart" -PassThru
+    $qemuProc.WaitForExit()
 }
 
 # 6. Cleanup and Reboot
